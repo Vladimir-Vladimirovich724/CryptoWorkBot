@@ -1,12 +1,13 @@
 import asyncio
 import sqlite3
+import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.client.default import DefaultBotProperties
 
 # --- Конфигурация ---
-BOT_TOKEN = "8407797944:AAF17Gyt8AcM0hwys7fMAclwMvnwdpeEjhI"
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # токен берём из переменной окружения
 ADMIN_USERNAME = "@Ferdinantik_ot777"
 TON_WALLET = "UQAndbKgGhUtqSlXCA8pL_aCq0xwxtf4HVyREfwUkgCs047M"
 DB_PATH = "crypto_users.db"
