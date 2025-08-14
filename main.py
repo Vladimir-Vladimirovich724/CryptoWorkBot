@@ -1,15 +1,19 @@
 import os
+import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-import asyncio
 
-TOKEN = os.getenv("BOT_TOKEN")  # токен берем из переменной среды
-BOT_USERNAME = "CryptoWorkBot"  # твой username бота без @
+TOKEN = os.getenv("BOT_TOKEN")  # токен из переменных среды Render
+BOT_USERNAME = "MenqenqmersareryBot"  # username бота без @
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# Простая "база данных" в памяти
+users = {}
+balances = {}
+referrals = {}
 
 # Главное меню
 def main_menu():
@@ -24,12 +28,24 @@ def main_menu():
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
+    args = message.text.split()
     user_id = message.from_user.id
-    referral_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+
+    if user_id not in balances:
+        balances[user_id] = 0.0
+        referrals[user_id] = []
+
+    # Обработка рефералки
+    if len(args) > 1:
+        inviter_id = int(args[1])
+        if inviter_id != user_id and user_id not in referrals.get(inviter_id, []):
+            referrals[inviter_id].append(user_id)
+            balances[inviter_id] += 0.1
+
     await message.answer(
-        f"👋 Привет, {message.from_user.first_name}!\n\n"
-        f"👥 Приглашай друзей и получай 0.1 TON за каждого!\n\n"
-        f"🔗 Твоя ссылка:\n{referral_link}",
+        f"👋 Привет, {message.from_user.first_name}!\n"
+        f"Добро пожаловать в CryptoWorkBot 💼\n\n"
+        f"Выполняй задания и зарабатывай TON!",
         reply_markup=main_menu()
     )
 
@@ -37,7 +53,8 @@ async def start_cmd(message: types.Message):
 # Обработчики кнопок
 @dp.callback_query(F.data == "balance")
 async def balance_callback(callback: types.CallbackQuery):
-    await callback.message.answer("💰 Ваш баланс: 0 TON")
+    bal = balances.get(callback.from_user.id, 0.0)
+    await callback.message.answer(f"💰 Ваш баланс: {bal} TON")
     await callback.answer()
 
 @dp.callback_query(F.data == "tasks")
@@ -48,9 +65,11 @@ async def tasks_callback(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "invite")
 async def invite_callback(callback: types.CallbackQuery):
     referral_link = f"https://t.me/{BOT_USERNAME}?start={callback.from_user.id}"
+    count = len(referrals.get(callback.from_user.id, []))
     await callback.message.answer(
         f"👥 Приглашай друзей и получай 0.1 TON за каждого!\n\n"
-        f"🔗 Ваша ссылка:\n{referral_link}"
+        f"🔗 Ваша ссылка:\n{referral_link}\n\n"
+        f"Вы пригласили: {count} чел."
     )
     await callback.answer()
 
