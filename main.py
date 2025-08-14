@@ -3,17 +3,21 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiohttp import web
+from aiohttp import web  # HTTP-сервер для Render
 
-TOKEN = os.getenv("BOT_TOKEN")  # токен из переменных среды Render
-BOT_USERNAME = "MenqenqmersareryBot"  # username бота без @
+TOKEN = os.getenv("BOT_TOKEN")
+BOT_USERNAME = "MenqenqmersareryBot"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Простая "база данных" в памяти
+# Данные в памяти
 balances = {}
 referrals = {}
+tasks = [
+    {"id": 1, "title": "Подпишись на канал 📢", "link": "https://t.me/example_channel", "reward": 0.2},
+    {"id": 2, "title": "Посмотри пост 📰", "link": "https://t.me/example_channel/1", "reward": 0.1}
+]
 
 # Главное меню
 def main_menu():
@@ -25,7 +29,6 @@ def main_menu():
     kb.adjust(2)
     return kb.as_markup()
 
-
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
     args = message.text.split()
@@ -35,7 +38,7 @@ async def start_cmd(message: types.Message):
         balances[user_id] = 0.0
         referrals[user_id] = []
 
-    # Обработка рефералки
+    # Рефералка
     if len(args) > 1:
         inviter_id = int(args[1])
         if inviter_id != user_id and user_id not in referrals.get(inviter_id, []):
@@ -49,21 +52,38 @@ async def start_cmd(message: types.Message):
         reply_markup=main_menu()
     )
 
-
-# Обработчики кнопок
+# Баланс
 @dp.callback_query(F.data == "balance")
 async def balance_callback(callback: types.CallbackQuery):
     bal = balances.get(callback.from_user.id, 0.0)
-    await callback.message.answer(f"💰 Ваш баланс: {bal} TON")
+    await callback.message.answer(f"💰 Ваш баланс: {bal:.2f} TON")
     await callback.answer()
 
-
+# Задания
 @dp.callback_query(F.data == "tasks")
 async def tasks_callback(callback: types.CallbackQuery):
-    await callback.message.answer("📋 Задания пока отсутствуют")
+    kb = InlineKeyboardBuilder()
+    for task in tasks:
+        kb.button(text=f"{task['title']} (+{task['reward']} TON)", callback_data=f"task_{task['id']}")
+    kb.adjust(1)
+    await callback.message.answer("📋 Доступные задания:", reply_markup=kb.as_markup())
     await callback.answer()
 
+# Выполнение задания
+@dp.callback_query(F.data.startswith("task_"))
+async def do_task_callback(callback: types.CallbackQuery):
+    task_id = int(callback.data.split("_")[1])
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        await callback.answer("Задание не найдено", show_alert=True)
+        return
 
+    balances[callback.from_user.id] = balances.get(callback.from_user.id, 0.0) + task["reward"]
+    await callback.message.answer(f"✅ Задание выполнено! Вы получили {task['reward']} TON\n"
+                                  f"🔗 {task['link']}")
+    await callback.answer()
+
+# Приглашения
 @dp.callback_query(F.data == "invite")
 async def invite_callback(callback: types.CallbackQuery):
     referral_link = f"https://t.me/{BOT_USERNAME}?start={callback.from_user.id}"
@@ -75,32 +95,28 @@ async def invite_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-
+# Вывод
 @dp.callback_query(F.data == "withdraw")
 async def withdraw_callback(callback: types.CallbackQuery):
     await callback.message.answer("💸 Вывод временно недоступен")
     await callback.answer()
 
-
-# ====== AIOHTTP СЕРВЕР ДЛЯ РЕНДЕР ======
+# HTTP-сервер для Render
 async def handle(request):
     return web.Response(text="Bot is running!")
 
-async def start_web_app():
+async def start_webserver():
     app = web.Application()
     app.router.add_get("/", handle)
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.getenv("PORT", 10000))
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"Web server started on port {port}")
-
 
 async def main():
-    await start_web_app()  # запуск HTTP сервера
+    await start_webserver()
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
