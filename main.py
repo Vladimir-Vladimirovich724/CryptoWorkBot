@@ -3,7 +3,7 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiohttp import web  # добавили aiohttp
+from aiohttp import web
 
 TOKEN = os.getenv("BOT_TOKEN")  # токен из переменных среды Render
 BOT_USERNAME = "MenqenqmersareryBot"  # username бота без @
@@ -12,7 +12,6 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # Простая "база данных" в памяти
-users = {}
 balances = {}
 referrals = {}
 
@@ -25,6 +24,7 @@ def main_menu():
     kb.button(text="💸 Вывод", callback_data="withdraw")
     kb.adjust(2)
     return kb.as_markup()
+
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
@@ -49,6 +49,7 @@ async def start_cmd(message: types.Message):
         reply_markup=main_menu()
     )
 
+
 # Обработчики кнопок
 @dp.callback_query(F.data == "balance")
 async def balance_callback(callback: types.CallbackQuery):
@@ -56,10 +57,12 @@ async def balance_callback(callback: types.CallbackQuery):
     await callback.message.answer(f"💰 Ваш баланс: {bal} TON")
     await callback.answer()
 
+
 @dp.callback_query(F.data == "tasks")
 async def tasks_callback(callback: types.CallbackQuery):
     await callback.message.answer("📋 Задания пока отсутствуют")
     await callback.answer()
+
 
 @dp.callback_query(F.data == "invite")
 async def invite_callback(callback: types.CallbackQuery):
@@ -72,28 +75,32 @@ async def invite_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
 @dp.callback_query(F.data == "withdraw")
 async def withdraw_callback(callback: types.CallbackQuery):
     await callback.message.answer("💸 Вывод временно недоступен")
     await callback.answer()
 
-# ----------------- Веб-сервер для Render -----------------
+
+# ====== AIOHTTP СЕРВЕР ДЛЯ РЕНДЕР ======
 async def handle(request):
     return web.Response(text="Bot is running!")
 
-async def start_web():
+async def start_web_app():
     app = web.Application()
     app.router.add_get("/", handle)
-    port = int(os.environ.get("PORT", 10000))  # Render задаёт порт в переменной окружения
+    port = int(os.environ.get("PORT", 10000))
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    print(f"Web server started on port {port}")
 
-# ----------------- Запуск -----------------
+
 async def main():
-    await start_web()  # запуск заглушки
+    await start_web_app()  # запуск HTTP сервера
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
