@@ -3,6 +3,7 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiohttp import web  # добавили aiohttp
 
 TOKEN = os.getenv("BOT_TOKEN")  # токен из переменных среды Render
 BOT_USERNAME = "MenqenqmersareryBot"  # username бота без @
@@ -24,7 +25,6 @@ def main_menu():
     kb.button(text="💸 Вывод", callback_data="withdraw")
     kb.adjust(2)
     return kb.as_markup()
-
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
@@ -48,7 +48,6 @@ async def start_cmd(message: types.Message):
         f"Выполняй задания и зарабатывай TON!",
         reply_markup=main_menu()
     )
-
 
 # Обработчики кнопок
 @dp.callback_query(F.data == "balance")
@@ -78,10 +77,23 @@ async def withdraw_callback(callback: types.CallbackQuery):
     await callback.message.answer("💸 Вывод временно недоступен")
     await callback.answer()
 
+# ----------------- Веб-сервер для Render -----------------
+async def handle(request):
+    return web.Response(text="Bot is running!")
 
+async def start_web():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    port = int(os.environ.get("PORT", 10000))  # Render задаёт порт в переменной окружения
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# ----------------- Запуск -----------------
 async def main():
+    await start_web()  # запуск заглушки
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
