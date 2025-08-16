@@ -4,6 +4,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import WebAppInfo
 
 # ==============================
 # НАСТРОЙКИ
@@ -17,6 +18,9 @@ dp = Dispatcher()
 balances = {}
 referrals = {}
 purchases = {}
+
+# URL вашего мини-приложения
+MINI_APP_URL = "https://cryptoworkbot-shop.onrender.com"
 
 # ==============================
 # ВЕБ-СЕРВЕР ДЛЯ RENDER
@@ -42,7 +46,10 @@ def main_menu():
     kb.button(text="💰 Баланс", callback_data="balance")
     kb.button(text="📋 Задания", callback_data="tasks")
     kb.button(text="👥 Приглашения", callback_data="invite")
-    kb.button(text="🛒 Магазин", callback_data="shop")
+    
+    # Новая кнопка, которая будет открывать мини-приложение
+    kb.button(text="🛒 Магазин", web_app=WebAppInfo(url=MINI_APP_URL)) 
+    
     kb.button(text="💸 Вывод", callback_data="withdraw")
     kb.adjust(2)
     return kb.as_markup()
@@ -107,47 +114,6 @@ async def invite_callback(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "withdraw")
 async def withdraw_callback(callback: types.CallbackQuery):
     await callback.message.answer("💸 Вывод временно недоступен")
-    await callback.answer()
-
-
-# ==============================
-# МАГАЗИН
-# ==============================
-@dp.callback_query(F.data == "shop")
-async def shop_callback(callback: types.CallbackQuery):
-    kb = InlineKeyboardBuilder()
-    kb.button(text="⚡ Бустер дохода (10⭐)", callback_data="buy_boost")
-    kb.button(text="🌟 VIP-доступ (20⭐)", callback_data="buy_vip")
-    kb.adjust(1)
-    await callback.message.answer("🛒 Магазин\nВыберите товар:", reply_markup=kb.as_markup())
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "buy_boost")
-async def buy_boost(callback: types.CallbackQuery):
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title="⚡ Бустер дохода",
-        description="Увеличивает доход на 50%",
-        payload="booster_1",
-        provider_token="",  # сюда вставим provider_token из BotFather
-        currency="XTR",  # Stars
-        prices=[types.LabeledPrice(label="Бустер", amount=10 * 100)],  # 10⭐
-    )
-    await callback.answer()
-
-
-@dp.callback_query(F.data == "buy_vip")
-async def buy_vip(callback: types.CallbackQuery):
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title="🌟 VIP-доступ",
-        description="Открывает VIP-функции в боте",
-        payload="vip_1",
-        provider_token="",  # provider_token
-        currency="XTR",
-        prices=[types.LabeledPrice(label="VIP-доступ", amount=20 * 100)],  # 20⭐
-    )
     await callback.answer()
 
 
