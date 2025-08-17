@@ -3,14 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мой Магазин</title>
+    <title>Магазин</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-    <h1>Добро пожаловать в магазин!</h1>
-    <p>Это ваше новое мини-приложение.</p>
-    <button id="closeButton">Закрыть приложение</button>
+    <div class="container">
+        <h1>🛒 Магазин</h1>
+        <p>Выберите товар, чтобы получить преимущество в игре.</p>
+        <div class="product-card">
+            <img src="https://i.ibb.co/6P0qXhR/booster.png" alt="Booster Icon">
+            <h2>⚡ Бустер дохода</h2>
+            <p>Увеличьте свой заработок в 2 раза на 24 часа!</p>
+            <button onclick="buyProduct('booster')">Купить за 10⭐</button>
+        </div>
+        <div class="product-card">
+            <img src="https://i.ibb.co/hL10y1V/vip.png" alt="VIP Icon">
+            <h2>🌟 VIP-доступ</h2>
+            <p>Получите постоянный доступ к эксклюзивным заданиям и бонусам.</p>
+            <button onclick="buyProduct('vip')">Купить за 20⭐</button>
+        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 </html>
