@@ -1,7 +1,4 @@
-// Это пример функции для закрытия приложения
-document.getElementById('closeButton').addEventListener('click', () => {
-    // Это специальная функция из библиотеки Telegram Web App
-    if (window.Telegram.WebApp) {
-        window.Telegram.WebApp.close();
-    }
-});
+function buyProduct(product_id) {
+    let url = `https://t.me/CryptoWorkBot?startapp=buy_` + product_id;
+    Telegram.WebApp.openTelegramLink(url);
+}
