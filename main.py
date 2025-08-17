@@ -13,7 +13,7 @@ from typing import Dict
 TOKEN = os.getenv("BOT_TOKEN")
 BOT_USERNAME = "MenqenqmersareryBot"
 # Ваш личный ID в Telegram для доступа к команде /add_ton
-MY_ID = 123456789
+MY_ID = 7352855554
 # 5% от покупок реферала
 REFERRAL_PERCENT = 0.05  
 
@@ -112,7 +112,7 @@ async def invite_callback(callback: types.CallbackQuery):
     referral_link = f"https://t.me/{BOT_USERNAME}?start={callback.from_user.id}"
     count = len(referrals.get(callback.from_user.id, []))
     await callback.message.answer(
-        f"👥 Приглашай друзей и получай процент от их покупок в магазине!\n\n"
+        f"👥 Приглашай друзей и получай 5% от их покупок в магазине и выполнении задании!\n\n"
         f"🔗 Ваша ссылка:\n{referral_link}\n\n"
         f"Вы пригласили: {count} чел."
     )
