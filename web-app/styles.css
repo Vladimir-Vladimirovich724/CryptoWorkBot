@@ -1,31 +1,65 @@
 body {
     font-family: Arial, sans-serif;
-    background: #f4f4f4;
+    background-color: #f0f2f5; /* Более мягкий фон */
     text-align: center;
     padding: 30px;
+    margin: 0;
+    display: flex; /* Используем flexbox для центрирования */
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh; /* Занимаем всю высоту экрана */
 }
 
 .container {
-    background: white;
-    padding: 20px;
+    background: linear-gradient(135deg, #ffffff, #f0f0f0); /* Небольшой градиент */
+    padding: 30px;
     border-radius: 15px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    display: inline-block;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); /* Более выразительная тень */
+    max-width: 400px;
+    width: 100%;
+}
+
+h1 {
+    color: #333;
+    margin-bottom: 20px;
 }
 
 button {
     display: block;
     width: 100%;
-    margin: 15px 0;
+    margin-bottom: 15px;
     padding: 15px;
     font-size: 18px;
+    font-weight: bold;
+    color: white;
+    background-color: #007bff; /* Яркий синий цвет */
     border: none;
     border-radius: 10px;
     cursor: pointer;
-    background: #4CAF50;
-    color: white;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 button:hover {
-    background: #45a049;
+    background-color: #0056b3; /* Более темный оттенок при наведении */
+    transform: translateY(-2px); /* Небольшое смещение вверх */
+}
+
+/* Стили для первой кнопки */
+button:nth-of-type(1) {
+    background-color: #28a745; /* Зеленый цвет для VIP */
+}
+
+button:nth-of-type(1):hover {
+    background-color: #218838;
+}
+
+/* Стили для второй кнопки */
+button:nth-of-type(2) {
+    background-color: #ffc107; /* Желтый цвет для Бустера */
+    color: #333;
+}
+
+button:nth-of-type(2):hover {
+    background-color: #e0a800;
 }
