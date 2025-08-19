@@ -1,7 +1,7 @@
 import os
 import json
 import asyncio
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F # Я добавил F сюда!
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
 
