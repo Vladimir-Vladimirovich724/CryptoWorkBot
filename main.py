@@ -1,7 +1,7 @@
 import os
 import json
 import asyncio
-from aiogram import Bot, Dispatcher, types, F # Я добавил F сюда!
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
 
@@ -36,26 +36,41 @@ user_balances = {
 }
 
 # ==============================
+# ОБЩАЯ КЛАВИАТУРА ДЛЯ БОТА
+# ==============================
+# Создаем общую клавиатуру для всех команд
+main_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+    [
+        types.InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
+        types.InlineKeyboardButton(text="📋 Задания", callback_data="tasks")
+    ],
+    [
+        types.InlineKeyboardButton(text="👥 Приглашения", callback_data="referrals"),
+        types.InlineKeyboardButton(text="🛍️ Магазин", web_app=WebAppInfo(url=MINI_APP_URL))
+    ],
+    [
+        types.InlineKeyboardButton(text="💳 Вывод", callback_data="withdraw")
+    ]
+])
+
+# ==============================
 # ОБРАБОТЧИКИ КОМАНД
 # ==============================
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     """
     Обработчик команды /start.
-    Приветствует пользователя и предлагает перейти в магазин.
+    Приветствует пользователя и показывает все кнопки.
     """
     user_id = message.from_user.id
     if user_id not in user_balances:
         user_balances[user_id] = 0 # Инициализируем баланс нового пользователя
     
-    markup = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🛍️ Магазин", web_app=WebAppInfo(url=MINI_APP_URL))]
-    ])
     await message.answer(
         f"Привет! 👋 Я бот CryptoWorkBot.\n\n"
         f"Твой баланс: **{user_balances.get(user_id, 0)} Stars** ✨\n\n"
-        f"Чтобы купить VIP-статус или Бустер, перейди в магазин по кнопке ниже.",
-        reply_markup=markup,
+        f"Выполняй задания, приглашай друзей и зарабатывай TON!",
+        reply_markup=main_keyboard, # Используем новую клавиатуру
         parse_mode="Markdown"
     )
 
@@ -63,14 +78,12 @@ async def cmd_start(message: types.Message):
 async def cmd_shop(message: types.Message):
     """
     Обработчик команды /shop.
-    Также открывает магазин.
     """
-    markup = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🛍️ Открыть магазин", web_app=WebAppInfo(url=MINI_APP_URL))]
-    ])
     await message.answer(
         "Нажмите кнопку ниже, чтобы открыть магазин:",
-        reply_markup=markup
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="🛍️ Открыть магазин", web_app=WebAppInfo(url=MINI_APP_URL))]
+        ])
     )
 
 @dp.message(Command("add_ton"))
@@ -102,6 +115,39 @@ async def cmd_add_ton(message: types.Message):
         await message.answer(
             "❌ Ошибка в команде. Используйте формат: /add_ton <ID пользователя> <сумма>"
         )
+
+# ==============================
+# ОБРАБОТЧИКИ НАЖАТИЯ КНОПОК
+# ==============================
+@dp.callback_query(F.data == "balance")
+async def process_balance_button(callback_query: types.CallbackQuery):
+    """
+    Обрабатывает нажатие кнопки "Баланс".
+    """
+    user_id = callback_query.from_user.id
+    balance = user_balances.get(user_id, 0)
+    await callback_query.answer(f"Твой баланс: {balance} Stars ✨", show_alert=True)
+
+@dp.callback_query(F.data == "tasks")
+async def process_tasks_button(callback_query: types.CallbackQuery):
+    """
+    Обрабатывает нажатие кнопки "Задания".
+    """
+    await callback_query.answer("Раздел 'Задания' пока в разработке.", show_alert=True)
+
+@dp.callback_query(F.data == "referrals")
+async def process_referrals_button(callback_query: types.CallbackQuery):
+    """
+    Обрабатывает нажатие кнопки "Приглашения".
+    """
+    await callback_query.answer("Раздел 'Приглашения' пока в разработке.", show_alert=True)
+
+@dp.callback_query(F.data == "withdraw")
+async def process_withdraw_button(callback_query: types.CallbackQuery):
+    """
+    Обрабатывает нажатие кнопки "Вывод".
+    """
+    await callback_query.answer("Раздел 'Вывод' пока в разработке.", show_alert=True)
 
 # ==============================
 # ПОЛУЧЕНИЕ ДАННЫХ ИЗ WEBAPP И ОБРАБОТКА ПОКУПКИ
