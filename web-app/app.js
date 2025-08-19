@@ -1,4 +1,6 @@
 function buyProduct(product_id) {
-    let url = `https://t.me/CryptoWorkBot?startapp=buy_` + product_id;
-    Telegram.WebApp.openTelegramLink(url);
+    Telegram.WebApp.sendData(JSON.stringify({
+        action: "buy",
+        product: product_id
+    }));
 }
