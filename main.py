@@ -72,17 +72,28 @@ async def open_shop(message: types.Message):
         reply_markup=main_kb
     )
 
-# ---------- ОБРАБОТЧИК WebApp ----------
+# Обработка данных из WebApp
 @dp.message(F.web_app_data)
 async def handle_web_app_data(message: types.Message):
     try:
         data = json.loads(message.web_app_data.data)
-        logging.info(f"📩 Получены данные из WebApp: {data}")
 
         if data.get("action") == "buy":
             product = data.get("product")
-            user_id = message.from_user.id
 
             if product == "vip":
-                purchases.setdefault(user_id, []).append("vip")
-                await message.answer("✅ Поздравляем
+                purchases.setdefault(message.from_user.id, []).append("vip")
+                await message.answer("✅ Поздравляем! 🌟 Вы купили VIP за 20 Stars.")
+
+            elif product == "booster":
+                purchases.setdefault(message.from_user.id, []).append("booster")
+                await message.answer("✅ Отлично! 🚀 Вы купили Бустер за 10 Stars.")
+
+            else:
+                await message.answer("❌ Неизвестный товар.")
+
+        else:
+            await message.answer("⚠️ Неверный формат данных от WebApp.")
+
+    except Exception as e:
+        await message.answer(f"Ошибка при обработке покупки: {e}")
