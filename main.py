@@ -4,6 +4,8 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
+from aiohttp import web
+from aiogram.enums import ParseMode
 
 # ==============================
 # КОНФИГУРАЦИЯ БОТА И ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -17,11 +19,9 @@ MINI_APP_URL = os.getenv("MINI_APP_URL")
 # Проверяем, что все переменные загружены
 if not all([BOT_TOKEN, BOT_USERNAME, MY_ID, MINI_APP_URL]):
     print("❌ ERROR: Не все переменные окружения загружены!")
-    # Можно добавить sys.exit(1), чтобы остановить приложение, если переменные не найдены
-    # import sys; sys.exit(1)
 
 # Инициализируем бота и диспетчер
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
 dp = Dispatcher()
 
 # Словарь цен на товары (в Stars)
@@ -67,11 +67,10 @@ async def cmd_start(message: types.Message):
         user_balances[user_id] = 0 # Инициализируем баланс нового пользователя
     
     await message.answer(
-        f"Привет! 👋 Я бот CryptoWorkBot.\n\n"
+        f"Привет! 👋 Я бот CryptoWorkBot\\.\n\n"
         f"Твой баланс: **{user_balances.get(user_id, 0)} Stars** ✨\n\n"
-        f"Выполняй задания, приглашай друзей и зарабатывай TON!",
-        reply_markup=main_keyboard, # Используем новую клавиатуру
-        parse_mode="Markdown"
+        f"Выполняй задания, приглашай друзей и зарабатывай TON\\!",
+        reply_markup=main_keyboard
     )
 
 @dp.message(Command("shop"))
@@ -93,7 +92,7 @@ async def cmd_add_ton(message: types.Message):
     Используется только для вас (админа).
     """
     if message.from_user.id != MY_ID:
-        await message.answer("❌ У вас нет прав для использования этой команды.")
+        await message.answer("❌ У вас нет прав для использования этой команды\\.")
         return
 
     try:
@@ -109,11 +108,11 @@ async def cmd_add_ton(message: types.Message):
             
         user_balances[target_user_id] += amount
         await message.answer(
-            f"✅ Успешно! Добавлено {amount} Stars на баланс пользователя с ID {target_user_id}."
+            f"✅ Успешно\\! Добавлено {amount} Stars на баланс пользователя с ID {target_user_id}\\."
         )
     except (ValueError, IndexError):
         await message.answer(
-            "❌ Ошибка в команде. Используйте формат: /add_ton <ID пользователя> <сумма>"
+            "❌ Ошибка в команде\\.\\nИспользуйте формат: \\/add\\_ton <ID пользователя> <сумма>"
         )
 
 # ==============================
@@ -133,21 +132,21 @@ async def process_tasks_button(callback_query: types.CallbackQuery):
     """
     Обрабатывает нажатие кнопки "Задания".
     """
-    await callback_query.answer("Раздел 'Задания' пока в разработке.", show_alert=True)
+    await callback_query.answer("Раздел 'Задания' пока в разработке\\.", show_alert=True)
 
 @dp.callback_query(F.data == "referrals")
 async def process_referrals_button(callback_query: types.CallbackQuery):
     """
     Обрабатывает нажатие кнопки "Приглашения".
     """
-    await callback_query.answer("Раздел 'Приглашения' пока в разработке.", show_alert=True)
+    await callback_query.answer("Раздел 'Приглашения' пока в разработке\\.", show_alert=True)
 
 @dp.callback_query(F.data == "withdraw")
 async def process_withdraw_button(callback_query: types.CallbackQuery):
     """
     Обрабатывает нажатие кнопки "Вывод".
     """
-    await callback_query.answer("Раздел 'Вывод' пока в разработке.", show_alert=True)
+    await callback_query.answer("Раздел 'Вывод' пока в разработке\\.", show_alert=True)
 
 # ==============================
 # ПОЛУЧЕНИЕ ДАННЫХ ИЗ WEBAPP И ОБРАБОТКА ПОКУПКИ
@@ -176,13 +175,13 @@ async def handle_web_app_data(message: types.Message):
             current_balance = user_balances.get(message.from_user.id, 0)
             if current_balance >= price:
                 user_balances[message.from_user.id] -= price
-                await message.answer(f"🎉 Вы успешно купили **{product.upper()}** за {price} Stars!\n"
+                await message.answer(f"🎉 Вы успешно купили **{product.upper()}** за {price} Stars\\!\\n"
                                      f"Ваш новый баланс: {user_balances[message.from_user.id]} Stars ✨")
             else:
-                await message.answer(f"❌ Недостаточно средств для покупки **{product.upper()}**.\n"
-                                     f"Ваш баланс: {current_balance} Stars. Требуется: {price} Stars.")
+                await message.answer(f"❌ Недостаточно средств для покупки **{product.upper()}**\\.\\n"
+                                     f"Ваш баланс: {current_balance} Stars\\. Требуется: {price} Stars\\.")
     except (json.JSONDecodeError, KeyError) as e:
-        await message.answer(f"❌ Ошибка при обработке данных из веб-приложения: неверный формат.")
+        await message.answer(f"❌ Ошибка при обработке данных из веб-приложения: неверный формат\\.")
         print(f"ERROR: Invalid JSON or key in web_app_data: {e}")
     except Exception as e:
         await message.answer(f"❌ Непредвиденная ошибка: {e}")
@@ -193,10 +192,28 @@ async def handle_web_app_data(message: types.Message):
 # ==============================
 async def main():
     """
-    Основная функция для запуска бота.
+    Основная функция для запуска бота с Webhook.
     """
-    print("Бот запускается...")
-    await dp.start_polling(bot)
+    # Получаем URL и порт, которые предоставляет Render
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not render_url:
+        print("❌ ERROR: Не удалось получить RENDER_EXTERNAL_URL. Запуск Webhook невозможен.")
+        return
+        
+    port = int(os.environ.get("PORT", 8000))
+    webhook_url = f"{render_url}/webhook"
+
+    print(f"Установка webhook на URL: {webhook_url}")
+    await bot.set_webhook(webhook_url)
+
+    # Запускаем веб-сервер для обработки webhook
+    app = web.Application()
+    app.router.add_post("/webhook", dp.webhooks.aiohttp_handlers["aiogram"])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    print(f"Бот запущен на порту {port}")
+    await site.start()
 
 if __name__ == "__main__":
     asyncio.run(main())
