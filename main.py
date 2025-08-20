@@ -8,14 +8,6 @@ from aiogram.types import WebAppInfo
 from aiogram.enums import ParseMode
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-# Попытка универсального импорта для разных версий aiogram
-try:
-    from aiogram.client.default import DefaultBotProperties
-    bot_default_properties = DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
-except ImportError:
-    # Возвращаемся к старому способу, если новый импорт не работает
-    bot_default_properties = None
-
 # ==============================
 # КОНФИГУРАЦИЯ БОТА И ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
 # ==============================
@@ -30,12 +22,8 @@ if not all([TOKEN, BOT_USERNAME, MY_ID, MINI_APP_URL]):
     print("❌ ОШИБКА: Не все переменные окружения загружены! Проверьте настройки Render.")
     exit(1) # Завершаем выполнение, если переменные не найдены
 
-# Инициализируем бота с правильным синтаксисом
-if bot_default_properties:
-    bot = Bot(token=TOKEN, default=bot_default_properties)
-else:
-    bot = Bot(token=TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
-
+# Инициализируем бота с использованием старого синтаксиса
+bot = Bot(token=TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
 dp = Dispatcher()
 
 # Цены товаров и процент для рефералов
@@ -265,8 +253,7 @@ async def main():
         
     port = int(os.environ.get("PORT", 8000))
     webhook_url = f"{render_url}webhook"
-    
-    # Добавляем отладочный вывод
+
     print(f"Используемый Webhook URL: {webhook_url}")
     
     try:
@@ -275,7 +262,7 @@ async def main():
         print("✅ Webhook успешно установлен.")
     except Exception as e:
         print(f"❌ ОШИБКА: Не удалось установить Webhook. {e}")
-        return # Завершаем, чтобы избежать дальнейших ошибок
+        return
 
     # Создаем веб-приложение aiohttp для обработки Webhook
     app = web.Application()
