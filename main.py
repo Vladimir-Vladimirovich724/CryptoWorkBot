@@ -6,8 +6,14 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
 from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+
+# Попытка универсального импорта для разных версий aiogram
+try:
+    from aiogram.client.default import DefaultBotProperties
+    bot_default_properties = DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
+except ImportError:
+    # Возвращаемся к старому способу, если новый импорт не работает
+    bot_default_properties = None
 
 # ==============================
 # КОНФИГУРАЦИЯ БОТА И ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -23,8 +29,12 @@ if not all([TOKEN, BOT_USERNAME, MY_ID, MINI_APP_URL]):
     print("❌ ОШИБКА: Не все переменные окружения загружены! Проверьте настройки Render.")
     exit(1) # Завершаем выполнение, если переменные не найдены
 
-# Инициализируем бота с правильным синтаксисом для новой версии aiogram
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
+# Инициализируем бота с правильным синтаксисом
+if bot_default_properties:
+    bot = Bot(token=TOKEN, default=bot_default_properties)
+else:
+    bot = Bot(token=TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
+
 dp = Dispatcher()
 
 # Цены товаров и процент для рефералов
@@ -238,10 +248,14 @@ async def add_ton_to_balance(message: types.Message):
 
 
 # ==============================
-# ЗАПУСК БОТА С WEBHooK
+# ГЛАВНАЯ ФУНКЦИЯ ДЛЯ ЗАПУСКА
 # ==============================
 async def main():
-    """Главная функция для запуска бота с использованием Webhook."""
+    """
+    Главная функция для запуска бота с использованием Webhook.
+    """
+    from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+    
     # Получаем URL и порт, предоставленные Render
     render_url = os.getenv("RENDER_EXTERNAL_URL")
     if not render_url:
