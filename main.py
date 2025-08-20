@@ -4,7 +4,6 @@ import asyncio
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
-from aiohttp import web
 from aiogram.enums import ParseMode
 
 # ==============================
@@ -192,28 +191,10 @@ async def handle_web_app_data(message: types.Message):
 # ==============================
 async def main():
     """
-    Main function to run the bot with Webhook.
+    Main function to run the bot with polling.
     """
-    # Get the URL and port provided by Render
-    render_url = os.getenv("RENDER_EXTERNAL_URL")
-    if not render_url:
-        print("❌ ERROR: Could not get RENDER_EXTERNAL_URL. Webhook launch is not possible.")
-        return
-        
-    port = int(os.environ.get("PORT", 8000))
-    webhook_url = f"{render_url}/webhook"
-
-    print(f"Setting webhook to URL: {webhook_url}")
-    await bot.set_webhook(webhook_url)
-
-    # Start the web server to handle the webhook
-    app = web.Application()
-    app.router.add_post("/webhook", dp.webhooks.aiohttp_handlers["aiogram"])
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    print(f"Bot is running on port {port}")
-    await site.start()
+    print("Bot is starting with polling...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
