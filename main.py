@@ -6,6 +6,8 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 # ==============================
 # КОНФИГУРАЦИЯ БОТА И ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
@@ -18,10 +20,11 @@ MINI_APP_URL = os.getenv("MINI_APP_URL")
 
 # Проверяем, загружены ли все переменные
 if not all([TOKEN, BOT_USERNAME, MY_ID, MINI_APP_URL]):
-    print("❌ ОШИБКА: Не все переменные окружения загружены!")
+    print("❌ ОШИБКА: Не все переменные окружения загружены! Проверьте настройки Render.")
+    exit(1) # Завершаем выполнение, если переменные не найдены
 
-# Инициализируем бота и диспетчер с правильным синтаксисом для новой версии aiogram
-bot = Bot(token=TOKEN, default=types.DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
+# Инициализируем бота с правильным синтаксисом для новой версии aiogram
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
 dp = Dispatcher()
 
 # Цены товаров и процент для рефералов
@@ -44,7 +47,6 @@ def load_data():
             try:
                 return json.load(f)
             except json.JSONDecodeError:
-                # Возвращаем пустые данные, если файл поврежден
                 print("❌ ОШИБКА: Файл data.json поврежден. Создание нового файла.")
                 return {"balances": {}, "referrals": {}, "purchases": {}}
     return {
@@ -63,7 +65,7 @@ def save_data(data):
 # ==============================
 def main_menu():
     """Создает и возвращает разметку главного меню."""
-    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+    return types.InlineKeyboardMarkup(inline_keyboard=[
         [
             types.InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
             types.InlineKeyboardButton(text="📋 Задания", callback_data="tasks")
@@ -76,7 +78,6 @@ def main_menu():
             types.InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw")
         ]
     ])
-    return kb
 
 # ==============================
 # СТАРТ
@@ -97,15 +98,12 @@ async def start_cmd(message: types.Message):
         data["referrals"][user_id] = []
         data["purchases"][user_id] = []
 
-    # Обработка реферальной ссылки
     if len(args) > 1:
         try:
             inviter_id = str(int(args[1]))
-            # Проверяем, что пригласитель существует и пользователь не пригласил сам себя
             if inviter_id != user_id and user_id not in data["referrals"].get(inviter_id, []):
                 data["referrals"].setdefault(inviter_id, []).append(user_id)
         except (ValueError, TypeError):
-            # Игнорируем некорректные ID в ссылке
             pass
     
     save_data(data)
@@ -162,7 +160,6 @@ async def handle_web_app_data(message: types.Message):
     user_id = str(message.from_user.id)
     db_data = load_data()
     
-    # Отладочное сообщение
     print(f"Получены данные от веб-приложения: {message.web_app_data.data}")
 
     try:
@@ -178,12 +175,10 @@ async def handle_web_app_data(message: types.Message):
 
             user_balance = db_data["balances"].get(user_id, 0.0)
 
-            # Проверяем, достаточно ли средств
             if user_balance >= price:
                 db_data["balances"][user_id] -= price
                 db_data["purchases"].setdefault(user_id, []).append(product)
                 
-                # Начисление реферальных бонусов
                 for inviter_id, invited_users in db_data["referrals"].items():
                     if user_id in invited_users:
                         referral_bonus = price * REFERRAL_PERCENT
@@ -243,12 +238,10 @@ async def add_ton_to_balance(message: types.Message):
 
 
 # ==============================
-# ГЛАВНАЯ ФУНКЦИЯ ДЛЯ ЗАПУСКА
+# ЗАПУСК БОТА С WEBHooK
 # ==============================
 async def main():
-    """
-    Главная функция для запуска бота с использованием Webhook.
-    """
+    """Главная функция для запуска бота с использованием Webhook."""
     # Получаем URL и порт, предоставленные Render
     render_url = os.getenv("RENDER_EXTERNAL_URL")
     if not render_url:
@@ -256,14 +249,21 @@ async def main():
         return
         
     port = int(os.environ.get("PORT", 8000))
-    webhook_url = f"{render_url}/webhook"
+    webhook_url = f"{render_url}webhook"
 
     print(f"Установка Webhook на URL: {webhook_url}")
     await bot.set_webhook(webhook_url)
 
-    # Запускаем веб-сервер для обработки webhook
+    # Создаем веб-приложение aiohttp для обработки Webhook
     app = web.Application()
-    app.router.add_post("/webhook", dp.webhooks.aiohttp_handlers["aiogram"])
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot
+    )
+    webhook_requests_handler.register(app, "/webhook")
+    
+    # Запускаем веб-сервер
+    setup_application(app, dp, bot=bot)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
