@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
 from aiogram.enums import ParseMode
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 # Попытка универсального импорта для разных версий aiogram
 try:
@@ -264,9 +265,17 @@ async def main():
         
     port = int(os.environ.get("PORT", 8000))
     webhook_url = f"{render_url}webhook"
-
-    print(f"Установка Webhook на URL: {webhook_url}")
-    await bot.set_webhook(webhook_url)
+    
+    # Добавляем отладочный вывод
+    print(f"Используемый Webhook URL: {webhook_url}")
+    
+    try:
+        print(f"Установка Webhook...")
+        await bot.set_webhook(webhook_url)
+        print("✅ Webhook успешно установлен.")
+    except Exception as e:
+        print(f"❌ ОШИБКА: Не удалось установить Webhook. {e}")
+        return # Завершаем, чтобы избежать дальнейших ошибок
 
     # Создаем веб-приложение aiohttp для обработки Webhook
     app = web.Application()
