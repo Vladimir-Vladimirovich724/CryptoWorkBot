@@ -1,22 +1,28 @@
 import os
-import asyncio
 import json
+import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.filters import CommandStart, Command
 from aiogram.types import WebAppInfo
+from aiogram.enums import ParseMode
 
 # ==============================
-# НАСТРОЙКИ. ИСПОЛЬЗУЙТЕ ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
+# КОНФИГУРАЦИЯ БОТА И ПЕРЕМЕННЫЕ ОКРУЖЕНИЯ
 # ==============================
-# Получаем токен бота из переменных окружения Render
-TOKEN = os.getenv("BOT_TOKEN")  
+# Получаем переменные окружения из Render
+TOKEN = os.getenv("BOT_TOKEN")
+BOT_USERNAME = os.getenv("BOT_USERNAME")
+MY_ID = int(os.getenv("MY_ID"))
+MINI_APP_URL = os.getenv("MINI_APP_URL")
 
-# Установите эти переменные окружения на вашей платформе (например, в Render)
-BOT_USERNAME = os.getenv("BOT_USERNAME", "MenqenqmersareryBot")
-MY_ID = int(os.getenv("MY_ID", "7352855554")) 
-MINI_APP_URL = os.getenv("MINI_APP_URL", "https://cryptoworkbot-shop.onrender.com")
+# Проверяем, загружены ли все переменные
+if not all([TOKEN, BOT_USERNAME, MY_ID, MINI_APP_URL]):
+    print("❌ ОШИБКА: Не все переменные окружения загружены!")
+
+# Инициализируем бота и диспетчер с правильным синтаксисом для новой версии aiogram
+bot = Bot(token=TOKEN, default=types.DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
+dp = Dispatcher()
 
 # Цены товаров и процент для рефералов
 PRODUCT_PRICES = {
@@ -24,9 +30,6 @@ PRODUCT_PRICES = {
     "booster": 10.0,
 }
 REFERRAL_PERCENT = 0.05
-
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
 
 # Имя файла для хранения данных
 DB_FILE = "data.json"
@@ -38,7 +41,12 @@ def load_data():
     """Загружает данные из JSON файла."""
     if os.path.exists(DB_FILE):
         with open(DB_FILE, "r") as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                # Возвращаем пустые данные, если файл поврежден
+                print("❌ ОШИБКА: Файл data.json поврежден. Создание нового файла.")
+                return {"balances": {}, "referrals": {}, "purchases": {}}
     return {
         "balances": {},
         "referrals": {},
@@ -51,35 +59,24 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 # ==============================
-# ВЕБ-СЕРВЕР ДЛЯ RENDER
-# ==============================
-async def handle(request):
-    """Обработчик для корневого URL, чтобы Render знал, что бот работает."""
-    return web.Response(text="✅ Bot is running!")
-
-async def start_webserver():
-    """Запускает простой веб-сервер."""
-    app = web.Application()
-    app.router.add_get("/", handle)
-    port = int(os.getenv("PORT", 10000))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-# ==============================
 # ГЛАВНОЕ МЕНЮ
 # ==============================
 def main_menu():
     """Создает и возвращает разметку главного меню."""
-    kb = InlineKeyboardBuilder()
-    kb.button(text="💰 Баланс", callback_data="balance")
-    kb.button(text="📋 Задания", callback_data="tasks")
-    kb.button(text="👥 Приглашения", callback_data="invite")
-    kb.button(text="🛒 Магазин", web_app=WebAppInfo(url=MINI_APP_URL))
-    kb.button(text="💸 Вывод", callback_data="withdraw")
-    kb.adjust(2)
-    return kb.as_markup()
+    kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
+            types.InlineKeyboardButton(text="📋 Задания", callback_data="tasks")
+        ],
+        [
+            types.InlineKeyboardButton(text="👥 Приглашения", callback_data="invite"),
+            types.InlineKeyboardButton(text="🛒 Магазин", web_app=WebAppInfo(url=MINI_APP_URL))
+        ],
+        [
+            types.InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw")
+        ]
+    ])
+    return kb
 
 # ==============================
 # СТАРТ
@@ -114,8 +111,9 @@ async def start_cmd(message: types.Message):
     save_data(data)
 
     await message.answer(
-        f"👋 Привет, {message.from_user.first_name}!\n"
-        f"Добро пожаловать в CryptoWorkBot 💼\n\n"
+        f"👋 Привет, {message.from_user.first_name}!\\n"
+        f"Добро пожаловать в CryptoWorkBot 💼\\n\\n"
+        f"Ваш баланс: **{data['balances'].get(user_id, 0)} Stars** ✨\\n\\n"
         f"Выполняй задания, приглашай друзей и зарабатывай TON!",
         reply_markup=main_menu()
     )
@@ -129,14 +127,12 @@ async def balance_callback(callback: types.CallbackQuery):
     data = load_data()
     user_id = str(callback.from_user.id)
     bal = data["balances"].get(user_id, 0.0)
-    await callback.message.answer(f"💰 Ваш баланс: {bal} TON")
-    await callback.answer()
+    await callback.answer(f"💰 Ваш баланс: {bal} TON", show_alert=True)
 
 @dp.callback_query(F.data == "tasks")
 async def tasks_callback(callback: types.CallbackQuery):
     """Сообщение о заданиях."""
-    await callback.message.answer("📋 Задания пока отсутствуют")
-    await callback.answer()
+    await callback.answer("📋 Задания пока отсутствуют", show_alert=True)
 
 @dp.callback_query(F.data == "invite")
 async def invite_callback(callback: types.CallbackQuery):
@@ -146,8 +142,8 @@ async def invite_callback(callback: types.CallbackQuery):
     data = load_data()
     count = len(data["referrals"].get(user_id, []))
     await callback.message.answer(
-        f"👥 Приглашай друзей и получай {REFERRAL_PERCENT*100}% от их покупок!\n\n"
-        f"🔗 Ваша ссылка:\n{referral_link}\n\n"
+        f"👥 Приглашай друзей и получай {REFERRAL_PERCENT*100}% от их покупок!\\n\\n"
+        f"🔗 Ваша ссылка:\\n{referral_link}\\n\\n"
         f"Вы пригласили: {count} чел."
     )
     await callback.answer()
@@ -155,8 +151,7 @@ async def invite_callback(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "withdraw")
 async def withdraw_callback(callback: types.CallbackQuery):
     """Сообщение о выводе средств."""
-    await callback.message.answer("💸 Вывод временно недоступен")
-    await callback.answer()
+    await callback.answer("💸 Вывод временно недоступен", show_alert=True)
 
 # ==============================
 # ПОЛУЧЕНИЕ ДАННЫХ ИЗ WEBAPP И ОБРАБОТКА ПОКУПКИ
@@ -165,17 +160,22 @@ async def withdraw_callback(callback: types.CallbackQuery):
 async def handle_web_app_data(message: types.Message):
     """Обрабатывает данные, полученные от веб-приложения."""
     user_id = str(message.from_user.id)
+    db_data = load_data()
+    
+    # Отладочное сообщение
+    print(f"Получены данные от веб-приложения: {message.web_app_data.data}")
+
     try:
-        data = json.loads(message.web_app_data.data)
-        if data["action"] == "buy":
-            product = data["product"]
+        data_from_app = json.loads(message.web_app_data.data)
+        
+        if data_from_app["action"] == "buy":
+            product = data_from_app["product"]
             price = PRODUCT_PRICES.get(product)
             
             if not price:
                 await message.answer("❌ Неизвестный товар.")
                 return
 
-            db_data = load_data()
             user_balance = db_data["balances"].get(user_id, 0.0)
 
             # Проверяем, достаточно ли средств
@@ -189,25 +189,32 @@ async def handle_web_app_data(message: types.Message):
                         referral_bonus = price * REFERRAL_PERCENT
                         db_data["balances"].setdefault(inviter_id, 0.0)
                         db_data["balances"][inviter_id] += referral_bonus
-                        await bot.send_message(
-                            int(inviter_id),
-                            f"🎉 Ваш реферал купил {product}! Вы получили {referral_bonus} TON."
-                        )
-                
-                save_data(db_data)
-                await message.answer(f"✅ Поздравляем! Вы купили {product} за {price} Stars.")
+                        try:
+                            await bot.send_message(
+                                int(inviter_id),
+                                f"🎉 Ваш реферал купил {product}! Вы получили {referral_bonus} TON."
+                            )
+                        except Exception as e:
+                            print(f"Не удалось отправить сообщение рефералу {inviter_id}: {e}")
+
+                await message.answer(f"✅ Поздравляем! Вы купили {product} за {price} Stars.\\n"
+                                     f"Ваш новый баланс: {db_data['balances'][user_id]} Stars ✨")
             else:
-                await message.answer("❌ Недостаточно средств.")
-                
+                await message.answer(f"❌ Недостаточно средств для покупки {product}.\\n"
+                                     f"Ваш баланс: {user_balance} Stars. Требуется: {price} Stars.")
     except (json.JSONDecodeError, KeyError) as e:
         await message.answer(f"❌ Ошибка при обработке покупки: неверный формат данных.")
+        print(f"ОШИБКА: Неверный JSON или ключ в web_app_data: {e}")
     except Exception as e:
         await message.answer(f"❌ Непредвиденная ошибка: {e}")
+        print(f"ОШИБКА: Непредвиденное исключение в обработчике web_app_data: {e}")
+    finally:
+        save_data(db_data)
 
 # ==============================
 # АДМИН-КОМАНДА ДЛЯ ПОПОЛНЕНИЯ БАЛАНСА
 # ==============================
-@dp.message(F.text.startswith('/add_ton'))
+@dp.message(Command("add_ton"))
 async def add_ton_to_balance(message: types.Message):
     """Позволяет администратору пополнить баланс пользователя."""
     if message.from_user.id != MY_ID:
@@ -215,26 +222,53 @@ async def add_ton_to_balance(message: types.Message):
         return
     try:
         args = message.text.split()
-        amount = float(args[1])
-        user_id = str(int(args[2]))
+        if len(args) != 3:
+            raise ValueError
+        
+        target_user_id = str(int(args[1]))
+        amount = float(args[2])
         
         db_data = load_data()
-        db_data["balances"].setdefault(user_id, 0.0)
-        db_data["balances"][user_id] += amount
+        db_data["balances"].setdefault(target_user_id, 0.0)
+        db_data["balances"][target_user_id] += amount
         save_data(db_data)
         
-        await message.answer(f"✅ Баланс пользователя {user_id} пополнен на {amount} TON.")
-        await bot.send_message(int(user_id), f"🎉 Ваш баланс пополнен на {amount} TON!")
+        await message.answer(f"✅ Баланс пользователя {target_user_id} пополнен на {amount} TON.")
+        try:
+            await bot.send_message(int(target_user_id), f"🎉 Ваш баланс пополнен на {amount} TON!")
+        except Exception as e:
+            print(f"Не удалось отправить сообщение пользователю {target_user_id}: {e}")
     except (ValueError, IndexError):
-        await message.answer("❌ Неверный формат. Используйте: /add_ton <сумма> <ID>")
+        await message.answer("❌ Неверный формат. Используйте: /add_ton <ID пользователя> <сумма>")
+
 
 # ==============================
-# MAIN
+# ГЛАВНАЯ ФУНКЦИЯ ДЛЯ ЗАПУСКА
 # ==============================
 async def main():
-    """Главная функция для запуска бота и веб-сервера."""
-    await start_webserver()
-    await dp.start_polling(bot)
+    """
+    Главная функция для запуска бота с использованием Webhook.
+    """
+    # Получаем URL и порт, предоставленные Render
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not render_url:
+        print("❌ ОШИБКА: Не удалось получить RENDER_EXTERNAL_URL. Запуск Webhook невозможен.")
+        return
+        
+    port = int(os.environ.get("PORT", 8000))
+    webhook_url = f"{render_url}/webhook"
+
+    print(f"Установка Webhook на URL: {webhook_url}")
+    await bot.set_webhook(webhook_url)
+
+    # Запускаем веб-сервер для обработки webhook
+    app = web.Application()
+    app.router.add_post("/webhook", dp.webhooks.aiohttp_handlers["aiogram"])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    print(f"Бот запущен на порту {port}")
+    await site.start()
 
 if __name__ == "__main__":
     asyncio.run(main())
