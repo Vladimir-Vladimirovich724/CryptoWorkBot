@@ -22,7 +22,7 @@ if not all([TOKEN, BOT_USERNAME, MY_ID, MINI_APP_URL]):
     print("❌ ОШИБКА: Не все переменные окружения загружены! Проверьте настройки Render.")
     exit(1) # Завершаем выполнение, если переменные не найдены
 
-# Инициализируем бота с использованием старого синтаксиса
+# Инициализируем бота с использованием старого синтаксиса для совместимости
 bot = Bot(token=TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
 dp = Dispatcher()
 
@@ -243,8 +243,6 @@ async def main():
     """
     Главная функция для запуска бота с использованием Webhook.
     """
-    from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-    
     # Получаем URL и порт, предоставленные Render
     render_url = os.getenv("RENDER_EXTERNAL_URL")
     if not render_url:
@@ -257,9 +255,17 @@ async def main():
     print(f"Используемый Webhook URL: {webhook_url}")
     
     try:
-        print(f"Установка Webhook...")
+        # Сначала пытаемся удалить старый вебхук, чтобы избежать конфликта
+        print("Попытка удалить старый Webhook...")
+        await bot.delete_webhook()
+        print("✅ Старый Webhook успешно удален.")
+    except Exception as e:
+        print(f"ℹ️ Не удалось удалить старый Webhook: {e}")
+
+    try:
+        print(f"Установка нового Webhook...")
         await bot.set_webhook(webhook_url)
-        print("✅ Webhook успешно установлен.")
+        print("✅ Новый Webhook успешно установлен.")
     except Exception as e:
         print(f"❌ ОШИБКА: Не удалось установить Webhook. {e}")
         return
