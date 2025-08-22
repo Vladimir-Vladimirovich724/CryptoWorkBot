@@ -1,136 +1,184 @@
-import os
-import json
 import asyncio
-import requests
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
-from aiogram.types import InputFile
-from aiohttp import web
+import logging
+import os
+from aiogram import Bot, Dispatcher, Router, types
+from aiogram.enums import ParseMode
+from aiogram.types import BotCommand
+from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+import aiohttp
+import json
+import base64
+import io
+import wave
+import uuid
 
-# ==============================
-# ПЕРЕМЕННЫЕ
-# ==============================
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-ELEVEN_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-VOICE_ID = "STANDARD_VOICE_ID"  # голос по умолчанию
-MY_ID = 123456789  # твой ID администратора
+# =========================
+# Конфигурация
+# =========================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
-dp = Dispatcher(bot)
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN env var is required. Задайте переменную окружения BOT_TOKEN.")
 
-DATA_FILE = "db.json"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
-# ==============================
-# ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ
-# ==============================
-def load_data():
+router = Router()
+
+# =========================
+# Состояния FSM для TTS
+# =========================
+class TTSStates(StatesGroup):
+    waiting_for_text = State()
+    waiting_for_voice = State()
+    waiting_for_language = State()
+
+# =========================
+# Хендлеры
+# =========================
+@router.message(CommandStart())
+async def cmd_start(message: types.Message):
+    """
+    Обрабатывает команду /start.
+    """
+    await message.answer("👋 Привет! Я готов к работе. Используйте /help для списка команд.")
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    """
+    Обрабатывает команду /help.
+    """
+    commands_list = (
+        "Список доступных команд:\n"
+        "/speak - Превратить текст в голос\n"
+    )
+    await message.answer(commands_list)
+
+@router.message(Command("speak"))
+async def cmd_speak(message: types.Message, state: FSMContext):
+    """
+    Начинает процесс преобразования текста в голос.
+    """
+    await message.answer("Пожалуйста, отправьте текст, который нужно озвучить.")
+    await state.set_state(TTSStates.waiting_for_text)
+
+@router.message(TTSStates.waiting_for_text)
+async def process_tts_text(message: types.Message, state: FSMContext):
+    """
+    Получает текст от пользователя и отправляет запрос к Gemini API для TTS.
+    """
+    await state.clear()
+    
+    # Отправляем сообщение-заглушку, чтобы пользователь знал, что процесс идет
+    processing_msg = await message.answer("⏳ Генерирую аудио...")
+    
+    text_to_speak = message.text
+    
+    # Конфигурация для TTS API
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    { "text": text_to_speak }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": { "voiceName": "Kore" }
+                }
+            }
+        },
+        "model": "gemini-2.5-flash-preview-tts"
+    }
+    
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={GOOGLE_API_KEY}"
+    
     try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"balances": {}}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(api_url, json=payload) as response:
+                response.raise_for_status()
+                data = await response.json()
+                
+                # Извлекаем аудиоданные
+                audio_data = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("inlineData", {}).get("data")
+                mime_type = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("inlineData", {}).get("mimeType")
+                
+                if audio_data and mime_type.startswith("audio/"):
+                    # Декодируем base64 данные
+                    pcm_data = base64.b64decode(audio_data)
+                    
+                    # Получаем частоту дискретизации из MIME-типа
+                    sample_rate_match = mime_type.split(';')[0].split('rate=')[1]
+                    sample_rate = int(sample_rate_match)
+                    
+                    # Сохраняем как WAV файл
+                    output = io.BytesIO()
+                    with wave.open(output, 'wb') as wav_file:
+                        wav_file.setnchannels(1)
+                        wav_file.setsampwidth(2)
+                        wav_file.setframerate(sample_rate)
+                        wav_file.writeframes(pcm_data)
+                    
+                    # Сбрасываем указатель файла
+                    output.seek(0)
+                    
+                    # Отправляем аудиофайл пользователю
+                    await message.answer_voice(
+                        voice=types.BufferedInputFile(output.getvalue(), filename=f"audio_{uuid.uuid4()}.wav"),
+                        caption=f"Ваше аудио готово! ✨"
+                    )
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
+                else:
+                    await message.answer("❌ Произошла ошибка: Не удалось сгенерировать аудио.")
+                    
+    except aiohttp.ClientError as e:
+        logging.error(f"Ошибка HTTP-запроса: {e}")
+        await message.answer("❌ Произошла ошибка при обращении к API. Попробуйте снова позже.")
+    except Exception as e:
+        logging.error(f"Непредвиденная ошибка: {e}")
+        await message.answer("❌ Произошла непредвиденная ошибка.")
+    finally:
+        await processing_msg.delete() # Удаляем сообщение-заглушку
 
-# ==============================
-# Существующие команды бота (рефералы, баланс и т.д.)
-# Здесь вставь свои старые функции покупки, add_ton и т.д.
-# ==============================
-
-# ==============================
-# НОВАЯ КОМАНДА: /tts
-# ==============================
-@dp.message(Command("tts"))
-async def tts_command(message: types.Message):
-    text = message.get_args()
-    if not text:
-        await message.answer("❌ Пришлите текст после команды, например: /tts Привет!")
-        return
-    
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
-    headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
-    data = {"text": text, "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}}
-    
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code == 200:
-        with open("voice.ogg", "wb") as f:
-            f.write(response.content)
-        await message.reply_voice(InputFile("voice.ogg"))
-    else:
-        await message.answer(f"❌ Ошибка при генерации голоса: {response.status_code}")
-
-# ==============================
-# ФУНКЦИЯ-ЗАГЛУШКА ДЛЯ АНИМАЦИИ
-# ==============================
-def generate_animation(image_path, audio_path):
+@router.message()
+async def fallback(message: types.Message):
     """
-    Заглушка: подключим D-ID API позже.
-    Возвращает путь к готовому видео (например, result.mp4)
+    Обрабатывает любые сообщения, которые не подошли под другие хендлеры.
     """
-    return "result.mp4"
+    await message.answer("Неизвестная команда. Напишите /help, чтобы увидеть список доступных команд.")
 
-# ==============================
-# НОВАЯ КОМАНДА: /animate
-# ==============================
-@dp.message(Command("animate"))
-async def animate_command(message: types.Message):
-    text = message.get_args()
-    if not text:
-        await message.answer("❌ Пришлите текст после команды, например: /animate Привет!")
-        return
-
-    # 1️⃣ Генерируем аудио
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
-    headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
-    data = {"text": text, "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}}
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code != 200:
-        await message.answer("❌ Ошибка при генерации голоса")
-        return
-    audio_path = "voice.ogg"
-    with open(audio_path, "wb") as f:
-        f.write(response.content)
-
-    # 2️⃣ Генерируем видео
-    image_path = "avatar.png"  # статичное изображение персонажа
-    video_path = generate_animation(image_path, audio_path)
-
-    # 3️⃣ Отправляем видео пользователю
-    await message.reply_video(InputFile(video_path))
-
-# ==============================
-# ГЛАВНАЯ ФУНКЦИЯ ДЛЯ ЗАПУСКА
-# ==============================
+# =========================
+# Главная функция запуска
+# =========================
 async def main():
-    render_url = os.getenv("RENDER_EXTERNAL_URL")
-    if not render_url:
-        print("❌ ОШИБКА: Не удалось получить RENDER_EXTERNAL_URL.")
-        return
-
-    port = int(os.environ.get("PORT", 8000))
-    webhook_url = f"{render_url}/webhook"
-
-    try:
-        await bot.delete_webhook()
-    except:
-        pass
-
-    await bot.set_webhook(webhook_url)
-
-    app = web.Application()
-    async def handler(request):
-        update = types.Update(**await request.json())
-        await dp.process_update(update)
-        return web.Response()
-    app.router.add_post("/webhook", handler)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    print(f"Бот запущен на порту {port}")
+    """
+    Основная функция для запуска бота.
+    """
+    bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
+    dp = Dispatcher()
+    dp.include_router(router)
+    
+    # Регистрация команд для меню бота
+    commands = [
+        BotCommand(command="start", description="Запуск бота"),
+        BotCommand(command="help", description="Помощь"),
+        BotCommand(command="speak", description="Превратить текст в голос"),
+    ]
+    await bot.set_my_commands(commands)
+    
+    logging.info("Бот запущен.")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен.")
