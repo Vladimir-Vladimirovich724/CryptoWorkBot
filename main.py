@@ -4,7 +4,7 @@ import os
 import json
 import io
 import wave
-import uuid
+import base64
 import aiohttp
 from aiohttp import web
 
@@ -14,11 +14,13 @@ from aiogram.types import BotCommand, BufferedInputFile
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.client.bot import DefaultBotProperties
 
 # =========================
 # Конфигурация и переменные окружения
 # =========================
-# Здесь мы берем переменные из окружения, которые нужно будет настроить на хостинге.
+# Мы будем брать переменные из окружения, которые нужно будет настроить на хостинге.
+# Сделаем проверку более надежной, чтобы избежать ошибок.
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 WEB_SERVER_HOST = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
@@ -26,9 +28,10 @@ WEB_SERVER_PORT = int(os.getenv("PORT", 8080))
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+# Проверяем, что все переменные окружения установлены.
 if not all([BOT_TOKEN, GOOGLE_API_KEY, WEBHOOK_URL]):
-    raise RuntimeError("BOT_TOKEN, GOOGLE_API_KEY, and WEBHOOK_URL env vars are required. "
-                       "Установите переменные окружения BOT_TOKEN, GOOGLE_API_KEY и WEBHOOK_URL.")
+    logging.error("Не удалось найти переменные окружения BOT_TOKEN, GOOGLE_API_KEY и WEBHOOK_URL.")
+    raise RuntimeError("Не удалось найти все необходимые переменные окружения.")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -127,7 +130,7 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                     output.seek(0)
                     
                     await message.answer_voice(
-                        voice=BufferedInputFile(output.getvalue(), filename=f"audio_{uuid.uuid4()}.wav"),
+                        voice=BufferedInputFile(output.getvalue(), filename="audio.wav"),
                         caption=f"Ваше аудио готово! ✨"
                     )
                 else:
@@ -179,7 +182,8 @@ def main():
     Main function to run the bot with aiohttp web server.
     Основная функция для запуска бота с веб-сервером aiohttp.
     """
-    bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
+    # Добавляем DefaultBotProperties для совместимости с aiogram 3.0+
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
     dp = Dispatcher()
     dp.include_router(router)
     
