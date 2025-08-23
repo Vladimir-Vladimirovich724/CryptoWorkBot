@@ -8,29 +8,23 @@ import base64
 import aiohttp
 from aiohttp import web
 
-from aiogram import Bot, Dispatcher, Router, types
+from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, BufferedInputFile
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 # =========================
 # Configuration and environment variables
 # =========================
-# We will get environment variables that need to be configured on the hosting.
-# We will make the check more reliable to avoid errors.
+# We will only need BOT_TOKEN and GOOGLE_API_KEY for polling
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-WEB_SERVER_HOST = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
-WEB_SERVER_PORT = int(os.getenv("PORT", 8080))
-WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 # Check that all environment variables are set.
-if not all([BOT_TOKEN, GOOGLE_API_KEY, WEBHOOK_URL]):
-    logging.error("Could not find environment variables BOT_TOKEN, GOOGLE_API_KEY, and WEBHOOK_URL.")
+if not all([BOT_TOKEN, GOOGLE_API_KEY]):
+    logging.error("Could not find environment variables BOT_TOKEN and GOOGLE_API_KEY.")
     raise RuntimeError("Could not find all required environment variables.")
 
 logging.basicConfig(
@@ -38,7 +32,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-router = Router()
+router = Dispatcher()
+bot = Bot(token=BOT_TOKEN)
 
 # =========================
 # FSM states for TTS
@@ -113,8 +108,7 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                 if audio_data and mime_type and mime_type.startswith("audio/"):
                     pcm_data = base64.b64decode(audio_data)
                     
-                    # Corrected parsing of sample rate based on ChatGPT's advice
-                    sample_rate = 24000 # Default to 24000 Hz if not found
+                    sample_rate = 24000
                     if mime_type and "rate=" in mime_type:
                         for part in mime_type.split(";"):
                             if "rate=" in part:
@@ -156,49 +150,13 @@ async def fallback(message: types.Message):
     await message.answer("Неизвестная команда. Напишите /help, чтобы увидеть список доступных команд.")
 
 # =========================
-# Main function to run with webhooks
+# Main function to run the bot with long-polling
 # =========================
-async def on_startup(dispatcher: Dispatcher, bot: Bot):
-    """
-    Sets up the webhook on bot startup.
-    """
-    await bot.set_webhook(f"{WEBHOOK_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Запуск бота"),
-        BotCommand(command="help", description="Помощь"),
-        BotCommand(command="speak", description="Превратить текст в голос"),
-    ])
-    logging.info("Bot is running with webhooks.")
-
-async def on_shutdown(dispatcher: Dispatcher, bot: Bot):
-    """
-    Deletes the webhook on bot shutdown.
-    """
-    await bot.delete_webhook()
-    logging.info("Bot has been stopped.")
-
-def main():
-    """
-    Main function to run the bot with aiohttp web server.
-    """
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher()
-    dp.include_router(router)
-    
-    app = web.Application()
-    
-    handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-    handler.register(app, path=WEBHOOK_PATH)
-    
-    setup_application(app, dp, bot=bot)
-
-    app.on_startup.append(lambda app, bot=bot: asyncio.create_task(on_startup(dp, bot)))
-    app.on_shutdown.append(lambda app, bot=bot: asyncio.create_task(on_shutdown(dp, bot)))
-
-    web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+async def main():
+    await router.start_polling(bot)
 
 if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.info("Bot has been stopped.")
