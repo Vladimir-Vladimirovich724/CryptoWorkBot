@@ -15,6 +15,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.client.bot import DefaultBotProperties
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 # =========================
 # Конфигурация и переменные окружения
@@ -188,17 +189,18 @@ def main():
     dp.include_router(router)
     
     app = web.Application()
-    web_server = web.AppRunner(app)
     
-    app.add_routes([web.post(WEBHOOK_PATH, dp.get_web_app_handler())])
+    # Исправляем ошибку AttributeError, используя правильный класс для вебхуков
+    handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    handler.register(app, path=WEBHOOK_PATH)
     
+    setup_application(app, dp, bot=bot)
+
     app.on_startup.append(lambda app, bot=bot: asyncio.create_task(on_startup(dp, bot)))
     app.on_shutdown.append(lambda app, bot=bot: asyncio.create_task(on_shutdown(dp, bot)))
-    
-    asyncio.run(web_server.setup())
-    site = web.TCPSite(web_server, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
-    asyncio.run(site.start())
-    
+
+    web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+
 if __name__ == "__main__":
     try:
         main()
