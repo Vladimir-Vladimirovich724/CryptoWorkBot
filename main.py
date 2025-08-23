@@ -176,8 +176,8 @@ def main():
     """
     Main function to run the bot with aiohttp web server.
     """
-    # Add DefaultBotProperties for compatibility with aiogram 3.0+
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
+    # Remove the Markdown parser to prevent errors
+    bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
     
