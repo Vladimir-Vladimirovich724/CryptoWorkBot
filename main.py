@@ -18,10 +18,10 @@ from aiogram.client.bot import DefaultBotProperties
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 # =========================
-# Конфигурация и переменные окружения
+# Configuration and environment variables
 # =========================
-# Мы будем брать переменные из окружения, которые нужно будет настроить на хостинге.
-# Сделаем проверку более надежной, чтобы избежать ошибок.
+# We will get environment variables that need to be configured on the hosting.
+# We will make the check more reliable to avoid errors.
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 WEB_SERVER_HOST = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
@@ -29,10 +29,10 @@ WEB_SERVER_PORT = int(os.getenv("PORT", 8080))
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Проверяем, что все переменные окружения установлены.
+# Check that all environment variables are set.
 if not all([BOT_TOKEN, GOOGLE_API_KEY, WEBHOOK_URL]):
-    logging.error("Не удалось найти переменные окружения BOT_TOKEN, GOOGLE_API_KEY и WEBHOOK_URL.")
-    raise RuntimeError("Не удалось найти все необходимые переменные окружения.")
+    logging.error("Could not find environment variables BOT_TOKEN, GOOGLE_API_KEY, and WEBHOOK_URL.")
+    raise RuntimeError("Could not find all required environment variables.")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,19 +42,18 @@ logging.basicConfig(
 router = Router()
 
 # =========================
-# Состояния FSM для TTS
+# FSM states for TTS
 # =========================
 class TTSStates(StatesGroup):
     waiting_for_text = State()
 
 # =========================
-# Хендлеры
+# Handlers
 # =========================
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
     """
     Handles the /start command.
-    Обрабатывает команду /start.
     """
     await message.answer("👋 Привет! Я готов к работе. Используйте /help для списка команд.")
 
@@ -62,7 +61,6 @@ async def cmd_start(message: types.Message):
 async def cmd_help(message: types.Message):
     """
     Handles the /help command.
-    Обрабатывает команду /help.
     """
     commands_list = (
         "Список доступных команд:\n"
@@ -74,7 +72,6 @@ async def cmd_help(message: types.Message):
 async def cmd_speak(message: types.Message, state: FSMContext):
     """
     Starts the text-to-speech process.
-    Начинает процесс преобразования текста в голос.
     """
     await message.answer("Пожалуйста, отправьте текст, который нужно озвучить.")
     await state.set_state(TTSStates.waiting_for_text)
@@ -83,7 +80,6 @@ async def cmd_speak(message: types.Message, state: FSMContext):
 async def process_tts_text(message: types.Message, state: FSMContext):
     """
     Receives text from the user and sends a request to the Gemini API for TTS.
-    Получает текст от пользователя и отправляет запрос к Gemini API для TTS.
     """
     await state.clear()
     
@@ -118,7 +114,7 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                 if audio_data and mime_type.startswith("audio/"):
                     pcm_data = base64.b64decode(audio_data)
                     
-                    # Извлекаем частоту дискретизации из MIME-типа
+                    # Extract sample rate from the MIME type
                     sample_rate_match = mime_type.split(';')[0].split('rate=')[1]
                     sample_rate = int(sample_rate_match)
                     
@@ -139,10 +135,10 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                     await message.answer("❌ Произошла ошибка: Не удалось сгенерировать аудио.")
                     
     except aiohttp.ClientError as e:
-        logging.error(f"Ошибка HTTP-запроса: {e}")
+        logging.error(f"HTTP request error: {e}")
         await message.answer("❌ Произошла ошибка при обращении к API. Попробуйте снова позже.")
     except Exception as e:
-        logging.error(f"Непредвиденная ошибка: {e}")
+        logging.error(f"Unexpected error: {e}")
         await message.answer("❌ Произошла непредвиденная ошибка.")
     finally:
         await processing_msg.delete()
@@ -151,17 +147,15 @@ async def process_tts_text(message: types.Message, state: FSMContext):
 async def fallback(message: types.Message):
     """
     Handles any unknown messages.
-    Обрабатывает любые неизвестные сообщения.
     """
     await message.answer("Неизвестная команда. Напишите /help, чтобы увидеть список доступных команд.")
 
 # =========================
-# Главная функция запуска с вебхуками
+# Main function to run with webhooks
 # =========================
 async def on_startup(dispatcher: Dispatcher, bot: Bot):
     """
     Sets up the webhook on bot startup.
-    Настраивает вебхук при запуске бота.
     """
     await bot.set_webhook(f"{WEBHOOK_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     await bot.set_my_commands([
@@ -169,29 +163,27 @@ async def on_startup(dispatcher: Dispatcher, bot: Bot):
         BotCommand(command="help", description="Помощь"),
         BotCommand(command="speak", description="Превратить текст в голос"),
     ])
-    logging.info("Бот запущен с вебхуками.")
+    logging.info("Bot is running with webhooks.")
 
 async def on_shutdown(dispatcher: Dispatcher, bot: Bot):
     """
     Deletes the webhook on bot shutdown.
-    Удаляет вебхук при остановке бота.
     """
     await bot.delete_webhook()
-    logging.info("Бот остановлен.")
+    logging.info("Bot has been stopped.")
 
 def main():
     """
     Main function to run the bot with aiohttp web server.
-    Основная функция для запуска бота с веб-сервером aiohttp.
     """
-    # Добавляем DefaultBotProperties для совместимости с aiogram 3.0+
+    # Add DefaultBotProperties for compatibility with aiogram 3.0+
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
     dp = Dispatcher()
     dp.include_router(router)
     
     app = web.Application()
     
-    # Исправляем ошибку AttributeError, используя правильный класс для вебхуков
+    # Correcting the AttributeError by using the correct class for webhooks
     handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
     handler.register(app, path=WEBHOOK_PATH)
     
@@ -206,4 +198,4 @@ if __name__ == "__main__":
     try:
         main()
     except (KeyboardInterrupt, SystemExit):
-        logging.info("Бот остановлен.")
+        logging.info("Bot has been stopped.")
