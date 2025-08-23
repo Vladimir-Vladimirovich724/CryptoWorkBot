@@ -1,27 +1,34 @@
 import asyncio
 import logging
 import os
-from aiogram import Bot, Dispatcher, Router, types
-from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
-from aiogram.filters import CommandStart, Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-import aiohttp
 import json
-import base64
 import io
 import wave
 import uuid
+import aiohttp
+from aiohttp import web
+
+from aiogram import Bot, Dispatcher, Router, types
+from aiogram.enums import ParseMode
+from aiogram.types import BotCommand, BufferedInputFile
+from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
 # =========================
-# Конфигурация
+# Конфигурация и переменные окружения
 # =========================
+# Здесь мы берем переменные из окружения, которые нужно будет настроить на хостинге.
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+WEB_SERVER_HOST = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
+WEB_SERVER_PORT = int(os.getenv("PORT", 8080))
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN env var is required. Задайте переменную окружения BOT_TOKEN.")
+if not all([BOT_TOKEN, GOOGLE_API_KEY, WEBHOOK_URL]):
+    raise RuntimeError("BOT_TOKEN, GOOGLE_API_KEY, and WEBHOOK_URL env vars are required. "
+                       "Установите переменные окружения BOT_TOKEN, GOOGLE_API_KEY и WEBHOOK_URL.")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,8 +42,6 @@ router = Router()
 # =========================
 class TTSStates(StatesGroup):
     waiting_for_text = State()
-    waiting_for_voice = State()
-    waiting_for_language = State()
 
 # =========================
 # Хендлеры
@@ -44,6 +49,7 @@ class TTSStates(StatesGroup):
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
     """
+    Handles the /start command.
     Обрабатывает команду /start.
     """
     await message.answer("👋 Привет! Я готов к работе. Используйте /help для списка команд.")
@@ -51,6 +57,7 @@ async def cmd_start(message: types.Message):
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """
+    Handles the /help command.
     Обрабатывает команду /help.
     """
     commands_list = (
@@ -62,6 +69,7 @@ async def cmd_help(message: types.Message):
 @router.message(Command("speak"))
 async def cmd_speak(message: types.Message, state: FSMContext):
     """
+    Starts the text-to-speech process.
     Начинает процесс преобразования текста в голос.
     """
     await message.answer("Пожалуйста, отправьте текст, который нужно озвучить.")
@@ -70,30 +78,23 @@ async def cmd_speak(message: types.Message, state: FSMContext):
 @router.message(TTSStates.waiting_for_text)
 async def process_tts_text(message: types.Message, state: FSMContext):
     """
+    Receives text from the user and sends a request to the Gemini API for TTS.
     Получает текст от пользователя и отправляет запрос к Gemini API для TTS.
     """
     await state.clear()
     
-    # Отправляем сообщение-заглушку, чтобы пользователь знал, что процесс идет
     processing_msg = await message.answer("⏳ Генерирую аудио...")
     
     text_to_speak = message.text
     
-    # Конфигурация для TTS API
     payload = {
         "contents": [
-            {
-                "parts": [
-                    { "text": text_to_speak }
-                ]
-            }
+            { "parts": [ { "text": text_to_speak } ] }
         ],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
             "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": { "voiceName": "Kore" }
-                }
+                "voiceConfig": { "prebuiltVoiceConfig": { "voiceName": "Kore" } }
             }
         },
         "model": "gemini-2.5-flash-preview-tts"
@@ -107,19 +108,15 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                 response.raise_for_status()
                 data = await response.json()
                 
-                # Извлекаем аудиоданные
                 audio_data = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("inlineData", {}).get("data")
                 mime_type = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("inlineData", {}).get("mimeType")
                 
                 if audio_data and mime_type.startswith("audio/"):
-                    # Декодируем base64 данные
                     pcm_data = base64.b64decode(audio_data)
                     
-                    # Получаем частоту дискретизации из MIME-типа
                     sample_rate_match = mime_type.split(';')[0].split('rate=')[1]
                     sample_rate = int(sample_rate_match)
                     
-                    # Сохраняем как WAV файл
                     output = io.BytesIO()
                     with wave.open(output, 'wb') as wav_file:
                         wav_file.setnchannels(1)
@@ -127,15 +124,12 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                         wav_file.setframerate(sample_rate)
                         wav_file.writeframes(pcm_data)
                     
-                    # Сбрасываем указатель файла
                     output.seek(0)
                     
-                    # Отправляем аудиофайл пользователю
                     await message.answer_voice(
-                        voice=types.BufferedInputFile(output.getvalue(), filename=f"audio_{uuid.uuid4()}.wav"),
+                        voice=BufferedInputFile(output.getvalue(), filename=f"audio_{uuid.uuid4()}.wav"),
                         caption=f"Ваше аудио готово! ✨"
                     )
-
                 else:
                     await message.answer("❌ Произошла ошибка: Не удалось сгенерировать аудио.")
                     
@@ -146,39 +140,63 @@ async def process_tts_text(message: types.Message, state: FSMContext):
         logging.error(f"Непредвиденная ошибка: {e}")
         await message.answer("❌ Произошла непредвиденная ошибка.")
     finally:
-        await processing_msg.delete() # Удаляем сообщение-заглушку
+        await processing_msg.delete()
 
 @router.message()
 async def fallback(message: types.Message):
     """
-    Обрабатывает любые сообщения, которые не подошли под другие хендлеры.
+    Handles any unknown messages.
+    Обрабатывает любые неизвестные сообщения.
     """
     await message.answer("Неизвестная команда. Напишите /help, чтобы увидеть список доступных команд.")
 
 # =========================
-# Главная функция запуска
+# Главная функция запуска с вебхуками
 # =========================
-async def main():
+async def on_startup(dispatcher: Dispatcher, bot: Bot):
     """
-    Основная функция для запуска бота.
+    Sets up the webhook on bot startup.
+    Настраивает вебхук при запуске бота.
+    """
+    await bot.set_webhook(f"{WEBHOOK_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Запуск бота"),
+        BotCommand(command="help", description="Помощь"),
+        BotCommand(command="speak", description="Превратить текст в голос"),
+    ])
+    logging.info("Бот запущен с вебхуками.")
+
+async def on_shutdown(dispatcher: Dispatcher, bot: Bot):
+    """
+    Deletes the webhook on bot shutdown.
+    Удаляет вебхук при остановке бота.
+    """
+    await bot.delete_webhook()
+    logging.info("Бот остановлен.")
+
+def main():
+    """
+    Main function to run the bot with aiohttp web server.
+    Основная функция для запуска бота с веб-сервером aiohttp.
     """
     bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.MARKDOWN_V2)
     dp = Dispatcher()
     dp.include_router(router)
     
-    # Регистрация команд для меню бота
-    commands = [
-        BotCommand(command="start", description="Запуск бота"),
-        BotCommand(command="help", description="Помощь"),
-        BotCommand(command="speak", description="Превратить текст в голос"),
-    ]
-    await bot.set_my_commands(commands)
+    app = web.Application()
+    web_server = web.AppRunner(app)
     
-    logging.info("Бот запущен.")
-    await dp.start_polling(bot)
-
+    app.add_routes([web.post(WEBHOOK_PATH, dp.get_web_app_handler())])
+    
+    app.on_startup.append(lambda app, bot=bot: asyncio.create_task(on_startup(dp, bot)))
+    app.on_shutdown.append(lambda app, bot=bot: asyncio.create_task(on_shutdown(dp, bot)))
+    
+    asyncio.run(web_server.setup())
+    site = web.TCPSite(web_server, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+    asyncio.run(site.start())
+    
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except (KeyboardInterrupt, SystemExit):
         logging.info("Бот остановлен.")
