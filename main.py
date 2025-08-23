@@ -118,6 +118,7 @@ async def process_tts_text(message: types.Message, state: FSMContext):
                 if audio_data and mime_type.startswith("audio/"):
                     pcm_data = base64.b64decode(audio_data)
                     
+                    # Извлекаем частоту дискретизации из MIME-типа
                     sample_rate_match = mime_type.split(';')[0].split('rate=')[1]
                     sample_rate = int(sample_rate_match)
                     
